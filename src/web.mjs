@@ -11,6 +11,9 @@ import { initLogin, sessionOk, handleLogin } from './login.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url)), ROOT = path.resolve(DIR, '..');
 let W = config.web || { port: 8787, key: '' };
+// 一期演示：demo.mjs 写入 demoIsolate，并设置 MAITIAN_DEMO=1。此时拒绝会拉起 hub、浏览器或外发通知的接口。
+const demoIsolated = () => process.env.MAITIAN_DEMO === '1' || config.demoIsolate === true;
+const refuseLive = (res) => send(res, 403, { error: '演示隔离：已禁止真实采集、登录、发布和外部通知', isolated: true });
 const send = (res, code, body, type = 'application/json; charset=utf-8', extra = {}) => { res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store', ...extra }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const readPj = (dir) => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'publish.json'), 'utf8')); } catch { return null; } };
 const short = (n) => n.split(/[｜|]/)[0].trim();
@@ -186,6 +189,7 @@ async function handle(req, res) {
     return send(res, 200, fs.readFileSync(f), /\.png$/.test(f) ? 'image/png' : /\.svg$/.test(f) ? 'image/svg+xml' : 'image/jpeg', { 'cache-control': 'max-age=300' });
   }
   if (u.pathname === '/api/integrations' && req.method === 'GET') return send(res, 200, integrations());
+  if (demoIsolated() && req.method === 'POST' && (u.pathname === '/api/integrations/feishu' || u.pathname === '/api/integrations/site' || u.pathname === '/api/integrations/feishu/test' || u.pathname === '/api/integrations/site/test' || u.pathname === '/api/action')) return refuseLive(res);
   if (u.pathname === '/api/integrations/feishu' && req.method === 'POST') {
     const a = await readJson(req), backup = snapConfig();
     try { applyFeishuPatch(config, { webhook: String(a.webhook ?? ''), login: a.login === true }); saveConfig(config); }
@@ -258,7 +262,9 @@ async function handle(req, res) {
 export function startWeb() {
   const srv = http.createServer((req, res) => { handle(req, res).catch((e) => { try { send(res, 500, { error: e.message }); } catch {} }); });
   initLogin(ROOT);
-  srv.listen(W.port, '0.0.0.0', () => console.log(`麦田网页：http://localhost:${W.port}/?key=${W.key}`));
+  // 默认仍是 0.0.0.0（手机同网段打开）。演示和安全启动用 web.host 或 MAITIAN_BIND=127.0.0.1。
+  const host = process.env.MAITIAN_BIND || W.host || '0.0.0.0';
+  srv.listen(W.port, host, () => console.log(`麦田网页：http://${host === '0.0.0.0' ? 'localhost' : host}:${W.port}/?key=${W.key}`));
   srv.on('error', (e) => console.error('麦田网页没起来：' + e.message));
   return srv;
 }
