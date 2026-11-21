@@ -1,16 +1,25 @@
 // 演示模式：不接任何平台，用一份假数据把麦田网页跑起来。
-//   node src/demo.mjs            生成 demo/ 目录（假配置、假数据库、假工程和封面），在 http://localhost:8788/?key=demo 打开
+//   node src/demo.mjs            生成 demo/ 目录（假配置、假数据库、假工程和封面），只在 http://127.0.0.1:8788/?key=demo 打开
 //   node src/demo.mjs --reset    重新生成假数据
-// 演示数据只在 demo/ 里，不碰你的 data/hub.db 和 config.json。
+// 演示数据默认在 demo/，也可用 MAITIAN_DEMO_DIR 换目录。不碰 data/hub.db，也不改仓库根目录的 config.json。
 import fs from 'node:fs'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const D = path.join(ROOT, 'demo'), PROJ = path.join(D, 'projects');
+const D = process.env.MAITIAN_DEMO_DIR ? path.resolve(process.env.MAITIAN_DEMO_DIR) : path.join(ROOT, 'demo');
+const PROJ = path.join(D, 'projects');
+const port = Number(process.env.MAITIAN_DEMO_PORT || 8788);
 if (process.argv.includes('--reset')) fs.rmSync(D, { recursive: true, force: true });
 fs.mkdirSync(PROJ, { recursive: true });
-const cfg = { name: '麦田 · 演示', web: { port: 8788, key: 'demo' }, rootPath: PROJ, driver: 'direct', keepAlive: [],
-  site: { name: '课程站', base: 'https://example.com' }, xHandle: 'demo' };
+// 不写 webhook、隧道、NAS、飞书登录。plugin=local 且目录为空，避免去读本机 Chrome 扩展和用户资料。
+const cfg = {
+  name: '麦田 · 演示', learnLinks: false, demoIsolate: true, driver: 'direct', keepAlive: [],
+  plugin: 'local', pluginDir: path.join(D, 'plugin-disabled'), chromeProfile: path.join(D, 'chrome-profile'),
+  web: { port, key: 'demo', host: '127.0.0.1' }, rootPath: PROJ,
+  site: { name: '课程站', base: 'https://example.com' }, xHandle: 'demo',
+};
 fs.writeFileSync(path.join(D, 'config.json'), JSON.stringify(cfg, null, 2));
+process.env.MAITIAN_DEMO = '1';
+process.env.MAITIAN_BIND = process.env.MAITIAN_BIND || '127.0.0.1';
 process.env.MAITIAN_CONFIG = path.join(D, 'config.json');
 process.env.MAITIAN_DB = path.join(D, 'hub.db');
 const fresh = !fs.existsSync(process.env.MAITIAN_DB);
@@ -70,5 +79,15 @@ if (fresh) {
   console.log('演示数据已生成：demo/');
 }
 const { startWeb } = await import('./web.mjs');
-startWeb();
-console.log('打开 http://localhost:8788/?key=demo （Ctrl+C 退出）');
+const srv = startWeb();
+try {
+  await new Promise((res, rej) => {
+    const onErr = (e) => rej(e);
+    srv.once('error', onErr);
+    srv.once('listening', () => { srv.off('error', onErr); res(); });
+  });
+} catch (e) {
+  console.error('麦田网页没起来：' + e.message);
+  process.exit(1);
+}
+console.log(`打开 http://127.0.0.1:${port}/?key=demo （Ctrl+C 退出）`);

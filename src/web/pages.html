@@ -17,8 +17,14 @@
 <div class="bgfx"><i></i><i></i><i></i></div>
 <div class="page" id="app"><div class="empty" style="height:60vh">加载中…</div></div>
 <script src="/static/mt.js"></script>
+<script type="module" src="/static/guyun.js"></script>
 <script>
 let O = null, I = null, F = {}, timer = null, pick = null;
+const gyQuery = { status: '', q: '' };
+function ensureGuyun() {
+  if (window.renderGuyun) return Promise.resolve();
+  return new Promise((resolve) => addEventListener('gy-ready', resolve, { once: true }));
+}
 const toasted = new Set();
 let doctorPrimed = false;
 function doctorMsg(a, h) {
@@ -239,6 +245,17 @@ function vSystem() {
 
 async function render() {
   captureSiteDraft(); captureFsDraft();
+  if (O && O.ui === 'guyun') {
+    await ensureGuyun();
+    document.title = O.name || '古韵造物';
+    document.body.classList.add('guyun');
+    for (const l of document.querySelectorAll('link[rel=icon], link[rel=apple-touch-icon]')) l.remove();
+    const h = location.hash || '#/home';
+    const key = h.startsWith('#/') ? h.slice(2).split('/')[0] : 'home';
+    $('#app').innerHTML = topbar(O, key) + window.renderGuyun(O, key, gyQuery);
+    return;
+  }
+  document.body.classList.remove('guyun');
   const h = location.hash || '#/traffic', key = h.startsWith('#/ep/') ? 'archive' : h.slice(2).split('/')[0], app = $('#app'); after = () => {};
   let body; try { body = h.startsWith('#/ep/') ? await vEpisode(decodeURIComponent(h.slice(5))) : ({ traffic: vTraffic, calendar: vCalendar, convert: vConvert, archive: vArchive, system: vSystem }[key] || vTraffic)(); } catch (e) { body = `<div class="empty" style="height:40vh">出错了：${esc(e.message)}</div>`; }
   app.innerHTML = topbar(O, key) + body; after();
@@ -249,7 +266,14 @@ async function load() {
   catch (e) { if (!O) $('#app').innerHTML = `<div class="empty" style="height:60vh">连不上麦田服务（${esc(e.message)}）</div>`; }
 }
 function poll() { clearInterval(timer); timer = setInterval(async () => { await load(); if (!busy()) { clearInterval(timer); timer = null; } }, 4000); }
+document.addEventListener('input', (e) => {
+  if (!O || O.ui !== 'guyun' || !e.target.matches || !e.target.matches('[data-gy="q"]')) return;
+  gyQuery.q = e.target.value;
+  const pos = e.target.selectionStart;
+  render().then(() => { const el = document.querySelector('[data-gy="q"]'); if (el) { el.focus(); if (pos != null) el.setSelectionRange(pos, pos); } });
+});
 document.addEventListener('click', async (e) => {
+  if (O && O.ui === 'guyun' && e.target.closest('[data-act],[data-fs],[data-site]')) { e.preventDefault(); toast('未接入，没有执行'); return; }
   const pk = e.target.closest('[data-pick]'); if (pk) { e.preventDefault(); pick = pk.dataset.pick; render(); return; }
   const fsb = e.target.closest('[data-fs]');
   if (fsb) {
@@ -301,6 +325,8 @@ document.addEventListener('click', async (e) => {
   await load(); poll();
 });
 document.addEventListener('change', async (e) => {
+  if (O && O.ui === 'guyun' && e.target.matches && e.target.matches('[data-gy="status"]')) { gyQuery.status = e.target.value; render(); return; }
+  if (O && O.ui === 'guyun') return;
   if (e.target.id === 'fs-login' && I) {
     const r = await fetch('/api/integrations/feishu', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ webhook: $('#fs-webhook').value, login: e.target.checked }) }), j = await r.json().catch(() => ({}));
     if (r.ok) { I.feishu = j.feishu; paintFs(); toast(j.feishu.login ? '已开启验证码登录' : '已关闭验证码登录'); }

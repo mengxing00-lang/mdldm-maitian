@@ -11,6 +11,9 @@ import { initLogin, sessionOk, handleLogin } from './login.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url)), ROOT = path.resolve(DIR, '..');
 let W = config.web || { port: 8787, key: '' };
+// 一期演示：demo.mjs 写入 demoIsolate，并设置 MAITIAN_DEMO=1。此时拒绝会拉起 hub、浏览器或外发通知的接口。
+const demoIsolated = () => process.env.MAITIAN_DEMO === '1' || config.demoIsolate === true;
+const refuseLive = (res) => send(res, 403, { error: '演示隔离：已禁止真实采集、登录、发布和外部通知', isolated: true });
 const send = (res, code, body, type = 'application/json; charset=utf-8', extra = {}) => { res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store', ...extra }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const readPj = (dir) => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'publish.json'), 'utf8')); } catch { return null; } };
 const short = (n) => n.split(/[｜|]/)[0].trim();
@@ -145,7 +148,7 @@ async function handle(req, res) {
   }
   if (u.pathname === '/api/widget/code') return W.widgetToken && tokenEq(u.searchParams.get('t'), W.widgetToken) ? send(res, 200, widgetScript(req, 'maitian-widget.js'), 'text/javascript; charset=utf-8') : send(res, 401, '');   // 加载器每次刷新来取最新代码
   if (u.pathname === '/api/widget') return W.widgetToken && tokenEq(u.searchParams.get('t') || req.headers['x-widget-token'], W.widgetToken) ? send(res, 200, widgetData()) : send(res, 401, { error: '小组件口令不对' });
-  if (u.pathname === '/manifest.webmanifest') return send(res, 200, { name: config.name || '麦田', short_name: config.name || '麦田', start_url: '/', display: 'standalone', background_color: '#efe7d8', theme_color: '#efe7d8', icons: [{ src: '/static/icon-512.png', sizes: '512x512', type: 'image/png' }] }, 'application/manifest+json');
+  if (u.pathname === '/manifest.webmanifest') return send(res, 200, { name: config.name || '麦田', short_name: config.name || '麦田', start_url: '/', display: 'standalone', background_color: '#efe7d8', theme_color: '#efe7d8', icons: config.ui === 'guyun' ? [] : [{ src: '/static/icon-512.png', sizes: '512x512', type: 'image/png' }] }, 'application/manifest+json');
   // 飞书验证码登录（config.web.login = "feishu"）：/login 页面和接口不需要先登录
   const LOGIN = W.login === 'feishu' && config.feishuWebhook;
   if (LOGIN && await handleLogin(req, res, u, send)) return;
@@ -156,7 +159,11 @@ async function handle(req, res) {
     return send(res, 401, '<meta charset="utf-8"><body style="font:16px system-ui;padding:40px">需要访问口令。请用带 <code>?key=…</code> 的地址打开一次。</body>', 'text/html; charset=utf-8');
   }
   if (u.pathname.startsWith('/static/')) { const f = path.join(DIR, 'web', path.basename(u.pathname)); if (!/\.(css|js|png)$/.test(f) || !fs.existsSync(f)) return send(res, 404, ''); return send(res, 200, fs.readFileSync(f), f.endsWith('.css') ? 'text/css; charset=utf-8' : f.endsWith('.png') ? 'image/png' : 'text/javascript; charset=utf-8'); }
-  if (u.pathname === '/p') return send(res, 200, fs.readFileSync(path.join(DIR, 'web', 'pages.html')), 'text/html; charset=utf-8');
+  if (u.pathname === '/p' || (config.ui === 'guyun' && (u.pathname === '/' || u.pathname === '/board'))) {
+    let html = fs.readFileSync(path.join(DIR, 'web', 'pages.html'), 'utf8');
+    if (config.ui === 'guyun') html = html.replace('<title>麦田</title>', '<title>古韵造物</title>').replace('content="麦田"', 'content="古韵造物"').replace(/<link rel="(?:apple-touch-icon|icon)"[^>]*>\n/g, '');
+    return send(res, 200, html, 'text/html; charset=utf-8');
+  }
   if (u.pathname === '/board') return send(res, 200, fs.readFileSync(path.join(DIR, 'web', 'board.html')), 'text/html; charset=utf-8');
   if (u.pathname === '/') return send(res, 200, fs.readFileSync(path.join(DIR, 'web', 'board.html')), 'text/html; charset=utf-8');
   if (u.pathname === '/widget') {   // 小组件安装页（已登录才能看）：脚本里填好麦田地址和小组件口令，手机上一键复制
@@ -164,7 +171,7 @@ async function handle(req, res) {
     return send(res, 200, widgetPage(widgetScript(req, 'maitian-loader.js')), 'text/html; charset=utf-8');
   }
   if (u.pathname === '/api/overview') {
-    return send(res, 200, { name: config.name || '麦田', siteOn: !!SITE, learn: learnOn(config) ? learnUrl('maitian-board') : '', siteName: SITE ? SITE.name : '', siteLogo: !!(SITE && config.site.logo), board: config.board && config.board.url, driver: config.driver,
+    return send(res, 200, { name: config.name || '麦田', ui: config.ui || '', fixture: config.fixture === true, siteOn: config.ui === 'guyun' ? false : !!SITE, learn: config.ui === 'guyun' ? '' : (learnOn(config) ? learnUrl('maitian-board') : ''), siteName: config.ui === 'guyun' || !SITE ? '' : SITE.name, siteLogo: config.ui === 'guyun' ? false : !!(SITE && config.site.logo), board: config.ui === 'guyun' ? '' : (config.board && config.board.url), driver: config.driver,
       episodes: episodes().sort((a, b) => (b.episode || 0) - (a.episode || 0)).map(e => episodeView(e)), actions: actions.slice(-8).reverse(),
       site: { days: db.prepare('SELECT * FROM site_daily ORDER BY day').all(), channels: db.prepare('SELECT * FROM site_channels ORDER BY revenue DESC').all(),
         campaigns: db.prepare('SELECT * FROM site_campaigns ORDER BY reg DESC').all(), campaignsOn: getMeta('siteCampaigns') === 'on' },
@@ -186,6 +193,7 @@ async function handle(req, res) {
     return send(res, 200, fs.readFileSync(f), /\.png$/.test(f) ? 'image/png' : /\.svg$/.test(f) ? 'image/svg+xml' : 'image/jpeg', { 'cache-control': 'max-age=300' });
   }
   if (u.pathname === '/api/integrations' && req.method === 'GET') return send(res, 200, integrations());
+  if (demoIsolated() && req.method === 'POST' && (u.pathname === '/api/integrations/feishu' || u.pathname === '/api/integrations/site' || u.pathname === '/api/integrations/feishu/test' || u.pathname === '/api/integrations/site/test' || u.pathname === '/api/action' || u.pathname === '/api/platform-toggle')) return refuseLive(res);
   if (u.pathname === '/api/integrations/feishu' && req.method === 'POST') {
     const a = await readJson(req), backup = snapConfig();
     try { applyFeishuPatch(config, { webhook: String(a.webhook ?? ''), login: a.login === true }); saveConfig(config); }
@@ -258,7 +266,10 @@ async function handle(req, res) {
 export function startWeb() {
   const srv = http.createServer((req, res) => { handle(req, res).catch((e) => { try { send(res, 500, { error: e.message }); } catch {} }); });
   initLogin(ROOT);
-  srv.listen(W.port, '0.0.0.0', () => console.log(`麦田网页：http://localhost:${W.port}/?key=${W.key}`));
+  // 默认仍是 0.0.0.0（手机同网段打开）。演示和安全启动用 web.host 或 MAITIAN_BIND=127.0.0.1。
+  const host = process.env.MAITIAN_BIND || W.host || '0.0.0.0';
+  const label = config.ui === 'guyun' ? '古韵造物' : '麦田网页';
+  srv.listen(W.port, host, () => console.log(`${label}：http://${host === '0.0.0.0' ? 'localhost' : host}:${W.port}/?key=${W.key}`));
   srv.on('error', (e) => console.error('麦田网页没起来：' + e.message));
   return srv;
 }

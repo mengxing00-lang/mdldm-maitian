@@ -30,11 +30,19 @@ function loginLight(h) {
 const platformSummary = (h) => loginLight(h)[1].replace(/^平台登录 /, '');
 function topbar(O, on) {
   const h = O.health, n = new Date(), [lc, lt] = loginLight(h);
+  if (O.ui === 'guyun') {
+    const nav = [['#/home', '工作台', 'home'], ['#/materials', '素材', 'materials'], ['#/review', '待审核', 'review'], ['#/schedule', '发布排期', 'schedule'], ['#/records', '发布记录', 'records']];
+    const key = ['home', 'materials', 'review', 'schedule', 'records'].includes(on) ? on : 'home';
+    return `<div class="top"><a class="logo" href="#/home">${esc(O.name || '古韵造物')}</a><div class="tag">工作台</div><div class="nav">${nav.map(([u, t, k]) => `<a class="${k === key ? 'on' : ''}" href="${u}">${t}</a>`).join('')}</div>
+      <div class="lights">${O.fixture ? '<span class="light warn">测试夹具</span>' : ''}<span class="light warn">账号 未接入</span><span class="light warn">经营 未接入</span><span class="light warn">集成 未接入</span></div>
+      <div class="clock"><small>${n.getMonth() + 1}/${n.getDate()} 周${'日一二三四五六'[n.getDay()]}</small>${pad(n.getHours())}:${pad(n.getMinutes())}</div></div>`;
+  }
   const nav = [['/', '大屏', 'board'], ['/p#/traffic', '流量', 'traffic'], ['/p#/calendar', '日历', 'calendar'], ['/p#/convert', '转化', 'convert'], ['/p#/archive', '档案', 'archive'], ['/p#/system', '系统', 'system']];
   return `<div class="top"><a class="logo" href="/">麦<i>田</i></a><div class="tag">内容与粉丝监控</div><div class="nav">${nav.map(([u, t, k]) => `<a class="${k === on ? 'on' : ''}" href="${u}">${t}</a>`).join('')}</div>
     <div class="lights"><span class="light ok">守护进程 运行中</span><span class="light ${h.nas ? 'ok' : 'bad'}">NAS ${h.nas ? '已挂载' : '读不到'}</span><span class="light ${h.chrome ? 'ok' : 'bad'}">专用浏览器 ${h.chrome ? '在线' : '没开'}</span><span class="light ${lc}">${lt}</span></div>
     <div class="clock"><small>${n.getMonth() + 1}/${n.getDate()} 周${'日一二三四五六'[n.getDay()]}</small>${pad(n.getHours())}:${pad(n.getMinutes())}</div></div>`;
 }
+window.mt = { $, esc, when, chip, PN, pad };
 function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(Math.max(v, 1)))); const m = v / p; return (m <= 1 ? 1 : m <= 1.5 ? 1.5 : m <= 2 ? 2 : m <= 3 ? 3 : m <= 4 ? 4 : m <= 5 ? 5 : m <= 7.5 ? 7.5 : 10) * p; }
 // 按天的柱图；最后 7 根更亮
 function drawCols(el, rows, unit = '') {
