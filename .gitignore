@@ -8,6 +8,7 @@ state/
 scripts-*.sh
 MAINTENANCE.md
 demo/
+guyun-data/
 src/*.local.mjs
 
 .superpowers/
