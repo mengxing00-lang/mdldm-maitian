@@ -31,8 +31,8 @@ const platformSummary = (h) => loginLight(h)[1].replace(/^平台登录 /, '');
 function topbar(O, on) {
   const h = O.health, n = new Date(), [lc, lt] = loginLight(h);
   if (O.ui === 'guyun') {
-    const nav = [['#/home', '工作台', 'home'], ['#/materials', '素材', 'materials'], ['#/review', '待审核', 'review'], ['#/schedule', '发布排期', 'schedule'], ['#/records', '发布记录', 'records']];
-    const key = ['home', 'materials', 'review', 'schedule', 'records'].includes(on) ? on : 'home';
+    const nav = [['#/home', '工作台', 'home'], ['#/materials', '素材', 'materials'], ['#/review', '待审核', 'review'], ['#/schedule', '发布排期', 'schedule'], ['#/records', '发布记录', 'records'], ['#/stats', '数据统计', 'stats'], ['#/monitor/flow', '数据监控', 'monitor']];
+    const key = ['home', 'materials', 'review', 'schedule', 'records', 'stats', 'monitor'].includes(on) ? on : 'home';
     return `<div class="top"><a class="logo" href="#/home">${esc(O.name || '古韵造物')}</a><div class="tag">工作台</div><div class="nav">${nav.map(([u, t, k]) => `<a class="${k === key ? 'on' : ''}" href="${u}">${t}</a>`).join('')}</div>
       <div class="lights">${O.fixture ? '<span class="light warn">测试夹具</span>' : ''}<span class="light warn">账号 未接入</span><span class="light warn">经营 未接入</span><span class="light warn">集成 未接入</span></div>
       <div class="clock"><small>${n.getMonth() + 1}/${n.getDate()} 周${'日一二三四五六'[n.getDay()]}</small>${pad(n.getHours())}:${pad(n.getMinutes())}</div></div>`;

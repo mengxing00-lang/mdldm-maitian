@@ -25,6 +25,7 @@ process.env.MAITIAN_DB = path.join(D, 'hub.db');
 
 const { db, upsertEpisode, log, getMeta, setMeta } = await import('./db.mjs');
 const { seedRecords } = await import('./web/distribute.js');
+const { monitorSeed } = await import('./web/stats-fixture.js');
 await import('./followers.mjs');
 if (fixture && !db.prepare('SELECT COUNT(*) AS c FROM episodes').get().c) {
   const at = new Date(Date.now() + 864e5).toISOString();
@@ -48,6 +49,8 @@ if (fixture && !db.prepare('SELECT COUNT(*) AS c FROM episodes').get().c) {
   console.log('已写入测试夹具，不是古韵业务');
 }
 if (fixture && !getMeta('guyun.records')) setMeta('guyun.records', JSON.stringify(seedRecords()));
+if (fixture && !getMeta('guyun.statsUpdated')) setMeta('guyun.statsUpdated', '2026-11-27T02:00:00.000Z');
+if (fixture && !getMeta('guyun.monitor')) setMeta('guyun.monitor', JSON.stringify(monitorSeed()));
 
 const { startWeb } = await import('./web.mjs');
 const srv = startWeb();

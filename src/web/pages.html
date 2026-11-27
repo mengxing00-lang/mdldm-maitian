@@ -22,6 +22,8 @@
 let O = null, I = null, F = {}, timer = null, pick = null;
 const gyQuery = { status: '', q: '' };
 const gyDist = { groupId: 'dy-nishijin', mode: 'many-to-one', workIds: null, schedule: '', accountIntervalMin: 15, fileIntervalMin: 30 };
+const gyStat = { sort: 'play' };
+const gyMon = { platform: '', account: '', incremental: false, chart: true, columns: 2, sort: 'time', settings: false, notices: false, pointsNote: false };
 let gyKeepScroll = false;
 function gyScheduleDefault() {
   const d = new Date(Date.now() + 864e5), p = (n) => String(n).padStart(2, '0');
@@ -267,8 +269,10 @@ async function render() {
     document.body.classList.add('guyun');
     for (const l of document.querySelectorAll('link[rel=icon], link[rel=apple-touch-icon]')) l.remove();
     const h = location.hash || '#/home';
-    const key = h.startsWith('#/') ? h.slice(2).split('/')[0] : 'home';
-    $('#app').innerHTML = topbar(O, key) + window.renderGuyun(O, key, gyQuery, gyDist);
+    const parts = h.startsWith('#/') ? h.slice(2).split('/') : ['home'];
+    const key = parts[0] || 'home';
+    const sub = parts[1] || '';
+    $('#app').innerHTML = topbar(O, key) + window.renderGuyun(O, key, gyQuery, gyDist, { sub, stat: gyStat, mon: gyMon });
     if (keepY) scrollTo(0, keepY);
     return;
   }
@@ -291,6 +295,37 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('click', async (e) => {
   if (O && O.ui === 'guyun') {
+    const statsBtn = e.target.closest('[data-gy-stats]');
+    if (statsBtn) {
+      e.preventDefault(); statsBtn.disabled = true;
+      const r = await fetch('/api/guyun/stats', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'refresh' }) }), j = await r.json().catch(() => ({}));
+      toast(r.ok && j.delivered === false ? '已刷新夹具。没有请求平台。' : (j.error || '没有刷新'));
+      if (r.ok) await load();
+      return;
+    }
+    const monBtn = e.target.closest('[data-gy-mon]');
+    if (monBtn) {
+      e.preventDefault();
+      const op = monBtn.dataset.gyMon;
+      if (op === 'incremental') { gyMon.incremental = !gyMon.incremental; gyKeepScroll = true; render(); return; }
+      if (op === 'chart') { gyMon.chart = !gyMon.chart; gyKeepScroll = true; render(); return; }
+      if (op === 'columns') { gyMon.columns = gyMon.columns === 1 ? 2 : 1; gyKeepScroll = true; render(); return; }
+      if (op === 'sort') { gyMon.sort = gyMon.sort === 'play' ? 'time' : 'play'; gyKeepScroll = true; render(); return; }
+      if (op === 'settings') { gyMon.settings = !gyMon.settings; gyKeepScroll = true; render(); return; }
+      if (op === 'notices') { gyMon.notices = !gyMon.notices; gyKeepScroll = true; render(); return; }
+      if (op === 'points') { gyMon.pointsNote = !gyMon.pointsNote; gyKeepScroll = true; render(); return; }
+      if (op === 'hidden') { toast('没有隐藏项。这是示例控件，没有改数据。'); return; }
+      monBtn.disabled = true;
+      const r = await fetch('/api/guyun/monitor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op }) }), j = await r.json().catch(() => ({}));
+      const said = { refresh: '已把示例夹具填回来。没有请求平台。', start: '已在夹具里标成运行中。没有开始真实监控。', stop: '已在夹具里停止。没有外发。', clear: '已清空夹具显示。没有请求平台。', notice: '已记下一条示例通知。没有外发。' };
+      toast(r.ok && j.delivered === false ? (said[op] || '已更新夹具') : (j.error || '没有改成'));
+      if (r.ok && op === 'notices') gyMon.notices = true;
+      if (r.ok && op === 'notice') gyMon.notices = true;
+      if (r.ok) await load();
+      return;
+    }
+    const sortBtn = e.target.closest('[data-gy-sort]');
+    if (sortBtn) { gyStat.sort = sortBtn.dataset.gySort; gyKeepScroll = true; render(); return; }
     const group = e.target.closest('[data-gy-group]');
     if (group) { gyDist.groupId = group.dataset.gyGroup; gyKeepScroll = true; render(); return; }
     const mode = e.target.closest('[data-gy-mode]');
@@ -382,6 +417,8 @@ document.addEventListener('change', async (e) => {
     if (e.target.matches('[data-gy="schedule"]')) { gyDist.schedule = e.target.value; gyKeepScroll = true; render(); return; }
     if (e.target.matches('[data-gy="account-interval"]')) { gyDist.accountIntervalMin = e.target.value; gyKeepScroll = true; render(); return; }
     if (e.target.matches('[data-gy="file-interval"]')) { gyDist.fileIntervalMin = e.target.value; gyKeepScroll = true; render(); return; }
+    if (e.target.matches('[data-gy="mon-platform"]')) { gyMon.platform = e.target.value; gyMon.account = ''; gyKeepScroll = true; render(); return; }
+    if (e.target.matches('[data-gy="mon-account"]')) { gyMon.account = e.target.value; gyKeepScroll = true; render(); return; }
     return;
   }
   if (e.target.id === 'fs-login' && I) {

@@ -1,7 +1,8 @@
 import { filterItems, rowsFor } from './guyun-filter.js';
 import { MODES, planDistribution, selectableIds } from './distribute.js';
+import { statsPage, monitorPage } from './guyun-metrics.js';
 
-const NAV = [['home', '工作台'], ['materials', '素材'], ['review', '待审核'], ['schedule', '发布排期'], ['records', '发布记录']];
+const NAV = [['home', '工作台'], ['materials', '素材'], ['review', '待审核'], ['schedule', '发布排期'], ['records', '发布记录'], ['stats', '数据统计'], ['monitor', '数据监控']];
 const PN = { bilibili: 'B站', douyin: '抖音', xhs: '小红书', channels: '视频号', youtube: 'YouTube', x: 'X', instagram: 'Instagram', zsz: '知识站' };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const when = (iso) => { if (!iso) return ''; const d = new Date(iso); if (Number.isNaN(d.getTime())) return ''; const p = (n) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -41,12 +42,13 @@ function home(O) {
     records: (dist.records || []).length,
   };
   const label = (key, n) => {
+    if (n === 'demo') return '测试夹具 · 示例';
     if (n) return O.fixture ? `测试夹具 ${n}` : String(n);
     if (O.fixture && key === 'schedule' && approved) return '测试夹具 · 可编排';
     return '未接入';
   };
-  const cards = [['materials', '素材', counts.materials], ['review', '待审核', counts.review], ['schedule', '发布排期', counts.schedule], ['records', '发布记录', counts.records]];
-  return `${banner(O)}<div class="h1">${esc(O.name || '古韵造物')}</div><p class="lead">账号、素材、经营和集成都还没有真实来源。空的地方写「未接入」，不用 0 代替未知。${O.fixture ? '带「测试夹具」的成片和文案，只用来演示分组、三种分发和草稿回写。' : ''}</p>
+  const cards = [['materials', '素材', counts.materials], ['review', '待审核', counts.review], ['schedule', '发布排期', counts.schedule], ['records', '发布记录', counts.records], ['stats', '数据统计', O.fixture && O.stats && O.stats.fixture ? 'demo' : 0], ['monitor', '数据监控', O.fixture && O.monitor && O.monitor.fixture ? 'demo' : 0]];
+  return `${banner(O)}<div class="h1">${esc(O.name || '古韵造物')}</div><p class="lead">账号、素材、经营和集成都还没有真实来源。空的地方写「未接入」，不用 0 代替未知。${O.fixture ? '带「测试夹具」的成片、文案、统计和监控，只用来演示，不会请求平台。' : ''}</p>
   <div class="gy-grid">${cards.map(([k, name, n]) => `<a class="panel gy-card" href="#/${k}"><b>${name}</b><div class="gy-miss">${esc(label(k, n))}</div><div class="gy-k">打开${name}</div></a>`).join('')}</div>
   <div class="gy-grid" style="margin-top:16px">
     <div class="panel"><h3>账号</h3><div class="gy-miss">未接入</div><p>没有平台登录。示例账号组只是名单，不是会话。</p></div>
@@ -140,6 +142,8 @@ function bucket(O, key, q) {
     review: ['待审核', '没有待审条目。审核动作未接入。', [['awaiting_user', '待你点发布'], ['filled', '已填好']]],
     schedule: ['发布排期', '没有排期。不会自动排内容或产品。', [['scheduled', '已定时'], ['planned', '计划中']]],
     records: ['发布记录', '没有发布记录。发布动作未接入。', [['published', '已发布']]],
+    stats: ['数据统计', '数据统计未接入。没有真实播放、粉丝或作品汇总。', []],
+    monitor: ['数据监控', '数据监控未接入。没有流速、作品或订单。', []],
   }[key];
   const rows = filterItems(rowsFor(O.episodes, key), q);
   const list = !rows.length
@@ -151,7 +155,12 @@ function bucket(O, key, q) {
   return `${banner(O)}<div class="h1">${meta[0]}</div><p class="lead">${O.fixture ? '当前只显示带「测试夹具」标记的条目。' : meta[1]}</p>${filters(q, meta[2])}${body}`;
 }
 
-function page(O, key, q, dist) {
+function page(O, key, q, dist, extra) {
+  if (key === 'stats' || key === 'monitor') {
+    const ready = O.fixture && ((key === 'stats' ? O.stats : O.monitor) || {}).fixture;
+    if (!ready) return bucket(O, key, q);
+    return key === 'stats' ? statsPage(O, extra || {}) : monitorPage(O, extra || {});
+  }
   if (!(O.episodes || []).length || !O.fixture) return bucket(O, key, q);
   if (key === 'materials') return materialsPage(O, q);
   if (key === 'review') return reviewPage(O, q);
@@ -162,5 +171,5 @@ function page(O, key, q, dist) {
 
 window.guyunWorks = worksOf;
 window.guyunSelected = (O, picked) => selectableIds(worksOf(O), picked);
-window.renderGuyun = (O, key, q, dist) => key === 'home' || !NAV.some(([k]) => k === key) ? home(O) : page(O, key, q || { status: '', q: '' }, dist);
+window.renderGuyun = (O, key, q, dist, extra) => key === 'home' || !NAV.some(([k]) => k === key) ? home(O) : page(O, key, q || { status: '', q: '' }, dist, extra);
 window.dispatchEvent(new Event('gy-ready'));
