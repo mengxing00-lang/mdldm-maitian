@@ -23,22 +23,31 @@ process.env.MAITIAN_BIND = process.env.MAITIAN_BIND || '127.0.0.1';
 process.env.MAITIAN_CONFIG = path.join(D, 'config.json');
 process.env.MAITIAN_DB = path.join(D, 'hub.db');
 
-const { db, upsertEpisode, setTask, log } = await import('./db.mjs');
+const { db, upsertEpisode, log, getMeta, setMeta } = await import('./db.mjs');
+const { seedRecords } = await import('./web/distribute.js');
 await import('./followers.mjs');
 if (fixture && !db.prepare('SELECT COUNT(*) AS c FROM episodes').get().c) {
   const at = new Date(Date.now() + 864e5).toISOString();
-  const add = (id, name, tasks) => {
+  const works = [
+    ['fixture-weave', '【测试夹具】西阵织纹样短片', '成片', '示例文案：西阵织纹样走一遍镜头。不是在售商品，没有讲解卡。', 'approved'],
+    ['fixture-tea', '【测试夹具】古韵茶席成片', '成片', '示例文案：茶席只作画面举例。不是在售商品。', 'approved'],
+    ['fixture-album', '【测试夹具】京纹样册页', '成片', '示例文案：册页翻页。不是在售商品，不能当未核预告。', 'approved'],
+    ['fixture-preview', '【测试夹具】未核预告', '成片', '示例文案：这条还没点头。不能当预告发，也不能挂未核讲解卡。', 'awaiting_user'],
+    ['fixture-qc', '【测试夹具】待质检讲解文案', '文案', '示例文案：已点头，还在质检。质检通过之前不能分发。', 'in_qc'],
+  ];
+  for (let i = 0; i < works.length; i++) {
+    const [id, name, kind, copy, review] = works[i];
     const dir = path.join(PROJ, id);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'publish.json'), JSON.stringify({ version: 1, id, name, platforms: {} }));
-    upsertEpisode({ id, episode: null, name, dir, schedule: at });
-    for (const [p, state] of tasks) setTask(id, p, state, '测试夹具', {});
+    const guyun = { fixture: true, kind, copy, review, sale: false };
+    fs.writeFileSync(path.join(dir, 'publish.json'), JSON.stringify({ version: 1, id, name, platforms: {}, guyun }, null, 2));
+    fs.writeFileSync(path.join(dir, '示例说明.txt'), `${copy}\n这条是测试夹具，不是在售商品，没有真实视频文件。\n`);
+    upsertEpisode({ id, episode: works.length - i, name, dir, schedule: at });
     log(id, '', 'plan', '测试夹具');
-  };
-  add('fixture-review', '【测试夹具】待审条目', [['xhs', 'awaiting_user'], ['bilibili', 'scheduled']]);
-  add('fixture-record', '【测试夹具】发布记录', [['bilibili', 'published']]);
+  }
   console.log('已写入测试夹具，不是古韵业务');
 }
+if (fixture && !getMeta('guyun.records')) setMeta('guyun.records', JSON.stringify(seedRecords()));
 
 const { startWeb } = await import('./web.mjs');
 const srv = startWeb();
