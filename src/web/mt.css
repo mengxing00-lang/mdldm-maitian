@@ -211,4 +211,48 @@ body.guyun{overflow-x:hidden}body.guyun .page{max-width:100%;overflow-x:hidden}
 body.guyun .nav{flex-wrap:wrap;max-width:100%}
 body.guyun .lights{flex-wrap:wrap;white-space:normal;max-width:100%}
 body.guyun .logo{letter-spacing:0}
-@media(max-width:700px){.gy-grid{grid-template-columns:minmax(0,1fr)}.gy-miss{font-size:24px}body.guyun .logo{font-size:18px}}
+.gy-copy{margin:6px 0 0;line-height:1.55}
+.gy-kv{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:8px}
+.gy-tag{display:inline-block;font-size:12px;font-weight:600;line-height:1.4;padding:2px 8px;border-radius:999px;background:var(--bg);color:var(--t2)}
+.gy-tag.ex{background:#1d1d1f;color:#fff}.gy-tag.ok{background:var(--good-bg);color:var(--good)}
+.gy-tag.bad{background:var(--crit-bg);color:var(--crit)}.gy-tag.wait{background:var(--warn-bg);color:var(--warn)}
+.gy-tag.draft{background:var(--info-bg);color:var(--info)}
+.gy-err{color:var(--crit);font-weight:600}
+.gy-split{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:16px;align-items:start}
+.gy-split .panel{margin-bottom:16px}.gy-split .panel:last-child{margin-bottom:0}
+.gy-picks{display:grid;gap:8px}
+.gy-pick{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:var(--bg);border:0;border-radius:14px;padding:10px 12px;cursor:pointer;box-shadow:inset 0 0 0 1px transparent}
+.gy-pick.on{background:#fff;box-shadow:inset 0 0 0 2px var(--accent)}
+.gy-pick b{display:inline;font-size:14px}.gy-pick .gy-k{display:block}
+.gy-check{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.gy-check input{margin-top:3px;flex:none}
+.gy-check > span{flex:1;min-width:0}
+.gy-check .gy-k{display:block;margin-top:2px}
+.gy-draft{font:600 28px/1.2 -apple-system,"SF Pro Display","PingFang SC",sans-serif;letter-spacing:-.03em;color:var(--info)}
+.gy-task{padding:12px 0;border-top:1px solid var(--line)}.gy-task:first-child{border-top:0}
+.gy-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.gy-stat b{font:600 28px/1.15 -apple-system,"SF Pro Display","PingFang SC",sans-serif;letter-spacing:-.03em}
+.gy-stat-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap}
+.gy-stat-side{text-align:right}
+.gy-sub{display:flex;flex-direction:column;gap:6px}
+.gy-sub a{display:block;padding:8px 10px;border-radius:12px;background:rgba(0,0,0,.04);color:var(--t2)}
+.gy-sub a.on{background:#fff;color:var(--t1);box-shadow:inset 0 0 0 2px var(--accent)}
+.gy-sub-inline{flex-direction:row;flex-wrap:wrap;margin:0 0 14px}
+.gy-side{display:grid;grid-template-columns:168px minmax(0,1fr);gap:16px;align-items:start}
+.gy-donut{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.gy-legend{display:flex;align-items:center;gap:6px;margin:6px 0}
+.gy-legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.gy-table{width:100%;border-collapse:collapse;font-size:13px}
+.gy-table th,.gy-table td{text-align:left;padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
+.gy-table th{color:var(--t2);font-weight:600}
+.gy-sort{font:inherit;font-weight:600;color:inherit;background:transparent;border:0;padding:0;cursor:pointer}
+.gy-sort.on{color:var(--accent)}
+.gy-scroll{overflow-x:auto}
+.gy-works{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.gy-works.one{grid-template-columns:1fr}
+.gy-work{display:flex;gap:10px;padding:12px;background:#fff;border-radius:16px;box-shadow:var(--shadow)}
+.gy-ph{width:72px;height:96px;flex:none;border-radius:10px;background:#f1eee6;color:var(--t3);font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center}
+.gy-spark{width:140px;height:32px;margin-top:6px}
+.gy-mon-bar .btns{margin-top:10px}
+@media(max-width:1400px){body.guyun .top{flex-wrap:wrap;gap:10px 12px}body.guyun .nav{margin-left:0}body.guyun .lights{margin-left:0}}
+@media(max-width:700px){.gy-grid,.gy-split,.gy-side,.gy-works,.gy-cards{grid-template-columns:minmax(0,1fr)}.gy-cards{grid-template-columns:1fr 1fr}.gy-miss{font-size:22px;overflow-wrap:anywhere}body.guyun .logo{font-size:18px}.gy-draft,.gy-stat b{font-size:24px}.filters label{display:flex;flex-direction:column;gap:4px;width:100%}.filters input,.filters select{width:100%}.gy-stat-side{text-align:left}.gy-sub{flex-direction:row;flex-wrap:wrap}.gy-sub a{display:inline-block}.gy-table th,.gy-table td{white-space:normal}}

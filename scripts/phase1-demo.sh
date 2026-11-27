@@ -2,9 +2,10 @@
 # 古韵造物空工作台。只监听 127.0.0.1，数据在隔离目录。
 # 不加载作者示例，不接账号，不采集，不发通知，不开隧道。
 # 启动：scripts/phase1-demo.sh
-# 带测试夹具（页面会标明，不是默认）：scripts/phase1-demo.sh --fixture
+# 分发演示（仍不接号、不发布；页面会标明测试夹具）：scripts/phase1-demo.sh --fixture
+# 然后打开 http://127.0.0.1:8788/?key=guyun
 # 停止：scripts/phase1-stop.sh
-# 清空：scripts/phase1-demo.sh --reset
+# 清空后重来：先停止，再 scripts/phase1-demo.sh --reset --fixture
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export MAITIAN_DEMO_DIR="${MAITIAN_DEMO_DIR:-/tmp/guyun-phase1-74ad}"

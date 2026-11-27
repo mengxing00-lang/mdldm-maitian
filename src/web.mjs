@@ -8,6 +8,8 @@ import { learnOn, learnUrl } from './learn.mjs';
 import { review } from './review.mjs';
 import { accessEmail } from './access.mjs';
 import { initLogin, sessionOk, handleLogin } from './login.mjs';
+import { GROUPS, REVIEW, planDistribution, nextReview, seedRecords } from './web/distribute.js';
+import { buildStats, playExtent, monitorSeed, MONITOR_CHANNELS } from './web/stats-fixture.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url)), ROOT = path.resolve(DIR, '..');
 let W = config.web || { port: 8787, key: '' };
@@ -37,7 +39,8 @@ function episodeView(ep, full = false) {
       ...(full ? { copy: { title: p.title || p.shortTitle || '', body: p.desc || p.body || p.text || p.description || '', tags: p.tags || p.topics || [], covers: p.covers || [] }, shot: fs.existsSync(path.join(ep.dir, '发布档案', `${t.platform}.jpg`)) } : {}) };
   });
   const out = { id: ep.id, episode: ep.episode, name: ep.name, short: short(ep.name), nick: nickOf(ep.name, pj), schedule: ep.schedule, createdAt: ep.created_at, dir: ep.dir,
-    campaign: (JSON.stringify(pj.platforms).match(/utm_campaign=([\w-]+)/) || [])[1] || '', covers: Object.keys(pj.covers || {}), durationSec: pj.durationSec || 0, tasks, views, inter };
+    campaign: (JSON.stringify(pj.platforms || {}).match(/utm_campaign=([\w-]+)/) || [])[1] || '', covers: Object.keys(pj.covers || {}), durationSec: pj.durationSec || 0, tasks, views, inter };
+  if (pj.guyun) out.guyun = { fixture: pj.guyun.fixture === true, kind: String(pj.guyun.kind || ''), copy: String(pj.guyun.copy || ''), review: String(pj.guyun.review || ''), reviewCn: REVIEW[pj.guyun.review] || '', sale: false, file: fs.existsSync(path.join(ep.dir, '示例说明.txt')) ? '示例说明.txt' : '' };
   if (full) {
     out.logs = recentLogs(ep.id, 200);
     out.metrics = db.prepare('SELECT day, platform, views, likes, comments, favorites, shares FROM metrics WHERE episode_id=? ORDER BY day').all(ep.id);
@@ -130,11 +133,114 @@ function integrations() {
   };
 }
 const readJson = (req) => new Promise((res, rej) => { let b = ''; req.on('data', (d) => { b += d; if (b.length > 20000) req.destroy(); }); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); req.on('error', rej); });
+const BANNED_BODY = ['publish', 'login', 'cookie', 'cookies', 'token', 'password', 'passwd', 'webhook', 'proxy', 'plugin', 'weixin', 'wecom', 'feishu', 'dingtalk', 'notify', 'notifyUrl'];
+const bannedBody = (body) => BANNED_BODY.some((k) => Object.prototype.hasOwnProperty.call(body || {}, k));
+function distributionView() {
+  if (config.ui !== 'guyun') return undefined;
+  if (config.fixture !== true) return { fixture: false, connected: false, groups: [], plan: null, records: [] };
+  return { fixture: true, connected: false, groups: GROUPS, plan: metaJson('guyun.distribution'), records: metaJson('guyun.records') || [] };
+}
+function guyunWorks() {
+  return episodes().map((ep) => {
+    const pj = readPj(ep.dir) || {};
+    const g = pj.guyun || {};
+    return { id: ep.id, name: ep.name, review: g.review || '', fixture: g.fixture === true };
+  });
+}
+function guyunRecord(task) {
+  return {
+    id: `gen:${task.id}`, seed: false, fixture: true, label: '测试夹具', example: true, isPublic: false,
+    workId: task.workId, workName: task.workName, accountName: task.accountName, groupName: task.groupName, platform: task.platform,
+    status: 'draft', statusCn: '已进草稿', reason: '', linkLabel: '',
+    note: '示例回写：将入草稿箱。没有提交，也没有进入真实草稿箱。',
+    at: task.at, destination: 'draft', destinationCn: '将入草稿箱',
+    accountIntervalMin: task.accountIntervalMin, fileIntervalMin: task.fileIntervalMin,
+  };
+}
+async function guyunDistribute(req, res) {
+  if (config.ui !== 'guyun' || !demoIsolated()) return refuseLive(res);
+  const body = await readJson(req);
+  if (bannedBody(body)) return refuseLive(res);
+  if (config.fixture !== true) return send(res, 403, { error: '没有测试夹具，不能分发', code: 'no_fixture', isolated: true, tasks: [] });
+  const plan = planDistribution({ mode: body.mode, groupId: body.groupId, works: guyunWorks(), workIds: body.workIds, schedule: body.schedule, accountIntervalMin: body.accountIntervalMin, fileIntervalMin: body.fileIntervalMin });
+  if (!plan.ok) {
+    const code = plan.code === 'not_approved' || plan.code === 'not_fixture' ? 403 : 400;
+    return send(res, code, { error: plan.error, code: plan.code, blocked: plan.blocked || [], isolated: true, tasks: [] });
+  }
+  if (body.commit !== true) return send(res, 200, { ok: true, isolated: true, committed: false, plan });
+  const prev = metaJson('guyun.records') || seedRecords();
+  const records = prev.filter((r) => r.seed === true).concat(plan.tasks.map(guyunRecord));
+  setMeta('guyun.distribution', JSON.stringify(plan));
+  setMeta('guyun.records', JSON.stringify(records));
+  return send(res, 200, { ok: true, isolated: true, committed: true, plan, records });
+}
+async function guyunReview(req, res) {
+  if (config.ui !== 'guyun' || !demoIsolated()) return refuseLive(res);
+  const body = await readJson(req);
+  if (bannedBody(body)) return refuseLive(res);
+  if (config.fixture !== true) return send(res, 403, { error: '没有测试夹具，不能改审核', code: 'no_fixture', isolated: true });
+  const ep = getEpisode(body.id);
+  if (!ep) return send(res, 404, { error: '没有这条素材', code: 'not_found', isolated: true });
+  const pj = readPj(ep.dir);
+  if (!pj || !pj.guyun || pj.guyun.fixture !== true) return send(res, 403, { error: '只能改测试夹具的审核', code: 'not_fixture', isolated: true });
+  const step = nextReview(pj.guyun.review, body.review);
+  if (!step.ok) return send(res, 400, { error: step.error, code: step.code, isolated: true });
+  pj.guyun.review = step.review;
+  fs.writeFileSync(path.join(ep.dir, 'publish.json'), JSON.stringify(pj, null, 2));
+  return send(res, 200, { ok: true, isolated: true, id: ep.id, review: step.review, reviewCn: step.reviewCn });
+}
+function statsView() {
+  if (config.ui !== 'guyun') return undefined;
+  if (config.fixture !== true) return { fixture: false };
+  return buildStats(getMeta('guyun.statsUpdated') || '2026-11-27T02:00:00.000Z');
+}
+function monitorView() {
+  if (config.ui !== 'guyun') return undefined;
+  if (config.fixture !== true) return { fixture: false, delivered: false };
+  const state = metaJson('guyun.monitor') || monitorSeed();
+  const stats = buildStats(state.updatedAt || getMeta('guyun.statsUpdated'));
+  const works = state.cleared ? [] : stats.works;
+  const extent = playExtent(works);
+  return {
+    fixture: true, delivered: false, running: state.running !== false, cleared: state.cleared === true,
+    updatedAt: state.updatedAt || stats.updatedAt, accountTotal: stats.accounts.length, workTotal: works.length,
+    highPlay: extent.high, lowPlay: extent.low, works, accounts: stats.accounts, notices: state.notices || [],
+    channels: MONITOR_CHANNELS, orders: stats.orders, windowGoods: stats.windowGoods,
+  };
+}
+async function guyunStats(req, res) {
+  if (config.ui !== 'guyun' || !demoIsolated()) return refuseLive(res);
+  const body = await readJson(req);
+  if (bannedBody(body)) return refuseLive(res);
+  if (config.fixture !== true) return send(res, 403, { error: '没有测试夹具，不能刷新', code: 'no_fixture', isolated: true, delivered: false });
+  if (body.op !== 'refresh') return send(res, 400, { error: '只刷新夹具', isolated: true, delivered: false });
+  const updatedAt = new Date().toISOString();
+  setMeta('guyun.statsUpdated', updatedAt);
+  return send(res, 200, { ok: true, isolated: true, delivered: false, updatedAt, stats: statsView() });
+}
+async function guyunMonitor(req, res) {
+  if (config.ui !== 'guyun' || !demoIsolated()) return refuseLive(res);
+  const body = await readJson(req);
+  if (bannedBody(body)) return refuseLive(res);
+  if (config.fixture !== true) return send(res, 403, { error: '没有测试夹具，不能改监控', code: 'no_fixture', isolated: true, delivered: false });
+  const state = metaJson('guyun.monitor') || monitorSeed();
+  const now = new Date().toISOString();
+  if (body.op === 'refresh') { state.cleared = false; state.updatedAt = now; }
+  else if (body.op === 'start') { state.running = true; state.updatedAt = now; }
+  else if (body.op === 'stop') { state.running = false; state.updatedAt = now; }
+  else if (body.op === 'clear') { state.cleared = true; state.updatedAt = now; }
+  else if (body.op === 'notice') {
+    state.notices = [{ id: 'n-' + Date.now(), at: now, delivered: false, fixture: true, text: '示例通知：只写在这台夹具里。没有发到微信、企业微信、飞书或钉钉。' }, ...(state.notices || [])].slice(0, 20);
+  } else return send(res, 400, { error: '不支持的夹具操作', isolated: true, delivered: false });
+  setMeta('guyun.monitor', JSON.stringify(state));
+  return send(res, 200, { ok: true, isolated: true, delivered: false, monitor: monitorView() });
+}
 const snapConfig = () => JSON.parse(JSON.stringify(config));
 const rollbackConfig = (backup) => { for (const k of Object.keys(config)) delete config[k]; Object.assign(config, backup); };
 
 async function handle(req, res) {
   const u = new URL(req.url, 'http://x');
+  if (u.pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
   // 访问控制：前面挂了 Cloudflare Access（邮箱验证码）就认它的登录凭证；否则用口令（第一次带 ?key= 进来，之后用 cookie）
   if (/^\/static\/icon-\d+\.png$/.test(u.pathname)) return send(res, 200, fs.readFileSync(path.join(DIR, 'web', path.basename(u.pathname))), 'image/png', { 'cache-control': 'max-age=86400' });   // 主屏幕图标不用登录
   if (u.pathname === '/api/widget/img') {   // 小组件图片：头像（config.web.avatar）或最新一期封面缩略图，同一个只读口令
@@ -178,6 +284,7 @@ async function handle(req, res) {
       metrics: db.prepare('SELECT day, episode_id, platform, views FROM metrics ORDER BY day').all(),
       followers: db.prepare("SELECT day, platform, total, gain, loss, source FROM followers WHERE day >= date('now','localtime','-40 day') ORDER BY day").all(),
       samples: db.prepare('SELECT ts, episode_id, platform, views FROM samples ORDER BY ts').all(),
+      distribution: distributionView(), stats: statsView(), monitor: monitorView(),
       feed: feed(), health: { nas: fs.existsSync(config.rootPath), chrome: await chromeUp(), metricsDay: getMeta('metricsDay') || '', doctorDay: getMeta('doctorDay') || '', platforms: platformList() }, now: new Date().toISOString() });
   }
   if (u.pathname === '/site-logo') { const f = SITE && config.site.logo && path.resolve(ROOT, config.site.logo); return f && fs.existsSync(f) ? send(res, 200, fs.readFileSync(f), /\.svg$/.test(f) ? 'image/svg+xml' : /\.jpe?g$/.test(f) ? 'image/jpeg' : 'image/png', { 'cache-control': 'max-age=3600' }) : send(res, 404, ''); }
@@ -193,6 +300,10 @@ async function handle(req, res) {
     return send(res, 200, fs.readFileSync(f), /\.png$/.test(f) ? 'image/png' : /\.svg$/.test(f) ? 'image/svg+xml' : 'image/jpeg', { 'cache-control': 'max-age=300' });
   }
   if (u.pathname === '/api/integrations' && req.method === 'GET') return send(res, 200, integrations());
+  if (u.pathname === '/api/guyun/distribute' && req.method === 'POST') return guyunDistribute(req, res);
+  if (u.pathname === '/api/guyun/review' && req.method === 'POST') return guyunReview(req, res);
+  if (u.pathname === '/api/guyun/stats' && req.method === 'POST') return guyunStats(req, res);
+  if (u.pathname === '/api/guyun/monitor' && req.method === 'POST') return guyunMonitor(req, res);
   if (demoIsolated() && req.method === 'POST' && (u.pathname === '/api/integrations/feishu' || u.pathname === '/api/integrations/site' || u.pathname === '/api/integrations/feishu/test' || u.pathname === '/api/integrations/site/test' || u.pathname === '/api/action' || u.pathname === '/api/platform-toggle')) return refuseLive(res);
   if (u.pathname === '/api/integrations/feishu' && req.method === 'POST') {
     const a = await readJson(req), backup = snapConfig();
